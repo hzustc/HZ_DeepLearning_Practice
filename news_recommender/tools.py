@@ -12,36 +12,72 @@ from sklearn.preprocessing import LabelEncoder
 from datetime import datetime
 from sklearn.preprocessing import LabelEncoder
 
-from news_recommender.settings import save_path, data_path
+from news_recommender.settings import save_path
 
 warnings.filterwarnings('ignore')
 
 
 # debug模式： 从训练集中划出一部分数据来调试代码
-def get_all_click_sample(data_path='./data_raw/', sample_nums=10000):
+def get_train_and_test_click(data_path=r'D:\AI\HZ_DeepLearning_Practice\news_recommender\data_raw', sample_nums=150000):
     """
         训练集中采样一部分数据调试
         data_path: 原数据的存储路径
         sample_nums: 采样数目（这里由于机器的内存限制，可以采样用户做）
     """
-    all_click = pd.read_csv(data_path + 'train_click_log.csv')
-    all_user_ids = all_click.user_id.unique()
 
-    sample_user_ids = np.random.choice(all_user_ids, size=sample_nums, replace=False)
-    all_click = all_click[all_click['user_id'].isin(sample_user_ids)]
+    all_click_df = pd.read_csv(r'D:\AI\HZ_DeepLearning_Practice\news_recommender\data_raw\train_click_log.csv')
 
-    all_click = all_click.drop_duplicates((['user_id', 'click_article_id', 'click_timestamp']))
-    return all_click
+    #all_click_df = all_click_df.sample(1000)
+    all_user_ids = all_click_df.user_id.unique()
+
+    np.random.seed(42)
+    train_user_ids = np.random.choice(all_user_ids, size=sample_nums, replace=False)
+    valid_user_ids = list(set(all_user_ids)-set(train_user_ids))
+
+    train_click_df = all_click_df[all_click_df['user_id'].isin(train_user_ids)]
+    valid_click_df = all_click_df[all_click_df['user_id'].isin(valid_user_ids)]
+
+    valid_click_df = valid_click_df.sort_values(by=['user_id', 'click_timestamp'])
+    valid_click_last_df = valid_click_df.groupby('user_id').tail(1)
+
+    # 如果用户只有一个点击，hist为空了，会导致训练的时候这个用户不可见，此时默认泄露一下
+    def hist_func(user_df):
+        if len(user_df) == 1:
+            return user_df
+        else:
+            return user_df[:-1]
+
+    valid_click_df = valid_click_df.groupby('user_id').apply(hist_func).reset_index(drop=True)
+
+    testA_click_df = pd.read_csv(r'D:\AI\HZ_DeepLearning_Practice\news_recommender\data_raw\testA_click_log.csv')
+    testB_click_df = pd.read_csv(r'D:\AI\HZ_DeepLearning_Practice\news_recommender\data_raw\testB_click_log.csv')
+    length = len(testA_click_df)
+    user_id_counts = testA_click_df['user_id'].value_counts()
+    # 筛选出 user_id 出现次数大于 1 的行
+    testA_click_df = testA_click_df[testA_click_df['user_id'].isin(user_id_counts[user_id_counts > 1].index)]
+    print(f'delete {length - len(testA_click_df)} rows')
+
+    length = len(testB_click_df)
+    user_id_counts = testB_click_df['user_id'].value_counts()
+    # 筛选出 user_id 出现次数大于 1 的行
+    testB_click_df = testB_click_df[testB_click_df['user_id'].isin(user_id_counts[user_id_counts > 1].index)]
+    print(f'delete {length - len(testB_click_df)} rows')
+
+    train_click_df = pd.concat([train_click_df,valid_click_df, testA_click_df,testB_click_df]).drop_duplicates(['user_id', 'click_article_id', 'click_timestamp'])
+
+    valid_click_last_df.to_pickle(r'D:\AI\HZ_DeepLearning_Practice\news_recommender\tmp_results\valid_click_last_df.pkl')
+    train_click_df.to_pickle(r'D:\AI\HZ_DeepLearning_Practice\news_recommender\tmp_results\train_click_df.pkl')
+    return train_click_df,valid_click_last_df
 
 
 # 读取点击数据，这里分成线上和线下，如果是为了获取线上提交结果应该讲测试集中的点击数据合并到总的数据中
 # 如果是为了线下验证模型的有效性或者特征的有效性，可以只使用训练集
-def get_all_click_df(data_path='./data_raw/', offline=True):
+def get_all_click_df(data_path=r'D:\AI\HZ_DeepLearning_Practice\news_recommender\data_raw', offline=True):
     if offline:
-        all_click = pd.read_csv(data_path + 'train_click_log.csv')
+        all_click = pd.read_csv(r'D:\AI\HZ_DeepLearning_Practice\news_recommender\data_raw\train_click_log.csv')
     else:
-        trn_click = pd.read_csv(data_path + 'train_click_log.csv')
-        tst_click = pd.read_csv(data_path + 'testA_click_log.csv')
+        trn_click = pd.read_csv(r'D:\AI\HZ_DeepLearning_Practice\news_recommender\data_raw\train_click_log.csv')
+        tst_click = pd.read_csv(r'D:\AI\HZ_DeepLearning_Practice\news_recommender\data_raw\testA_click_log.csv')
 
         all_click = trn_click.append(tst_click)
 
@@ -50,8 +86,8 @@ def get_all_click_df(data_path='./data_raw/', offline=True):
 
 
 # 读取文章的基本属性
-def get_item_info_df(data_path):
-    item_info_df = pd.read_csv(data_path + 'articles.csv')
+def get_item_info_df(data_path=r'D:\AI\HZ_DeepLearning_Practice\news_recommender\data_raw'):
+    item_info_df = pd.read_csv(r'D:\AI\HZ_DeepLearning_Practice\news_recommender\data_raw\articles.csv')
 
     # 为了方便与训练集中的click_article_id拼接，需要把article_id修改成click_article_id
     item_info_df = item_info_df.rename(columns={'article_id': 'click_article_id'})
@@ -61,8 +97,8 @@ def get_item_info_df(data_path):
 
 # %%
 # 读取文章的Embedding数据
-def get_item_emb_dict(data_path):
-    item_emb_df = pd.read_csv(data_path + 'articles_emb.csv')
+def get_item_emb_dict(data_path=r'D:\AI\HZ_DeepLearning_Practice\news_recommender\data_raw'):
+    item_emb_df = pd.read_csv(r'D:\AI\HZ_DeepLearning_Practice\news_recommender\data_raw\articles_emb.csv')
 
     item_emb_cols = [x for x in item_emb_df.columns if 'emb' in x]
     item_emb_np = np.ascontiguousarray(item_emb_df[item_emb_cols])
@@ -70,7 +106,7 @@ def get_item_emb_dict(data_path):
     item_emb_np = item_emb_np / np.linalg.norm(item_emb_np, axis=1, keepdims=True)
 
     item_emb_dict = dict(zip(item_emb_df['article_id'], item_emb_np))
-    pickle.dump(item_emb_dict, open(save_path + 'item_content_emb.pkl', 'wb'))
+    pickle.dump(item_emb_dict, open(r'D:\AI\HZ_DeepLearning_Practice\news_recommender\tmp_results\item_content_emb.pkl', 'wb'))
 
     return item_emb_dict
 
@@ -176,19 +212,51 @@ def get_item_topk_click(click_df, k):
 
 # 依次评估召回的前10, 20, 30, 40, 50个文章中的击中率
 def metrics_recall(user_recall_items_dict, trn_last_click_df, topk=5):
+    """
+    计算召回的命中率（Hit Rate）和平均倒数排名（MRR）
+    :param user_recall_items_dict: 用户召回的物品字典，格式为 {user_id: [(item_id, pred_prob), ...]}
+    :param trn_last_click_df: 每个用户最后一次点击的物品数据，包含 ['user_id', 'click_article_id']
+    :param topk: 评估的top K值
+    """
     last_click_item_dict = dict(zip(trn_last_click_df['user_id'], trn_last_click_df['click_article_id']))
-    user_num = len(user_recall_items_dict)
+    user_num = len(last_click_item_dict)
 
-    for k in range(10, topk + 1, 10):
+    # 计算Hit Rate
+    print("Hit Rate:")
+    for k in range(5, topk + 1, 5):
         hit_num = 0
         for user, item_list in user_recall_items_dict.items():
-            # 获取前k个召回的结果
-            tmp_recall_items = [x[0] for x in user_recall_items_dict[user][:k]]
-            if last_click_item_dict[user] in set(tmp_recall_items):
-                hit_num += 1
+            if len(item_list) == 0 :
+                continue
+            if user in last_click_item_dict:
+
+                # 获取前k个召回的物品
+                tmp_recall_items = [x[0] for x in user_recall_items_dict[user][:k]]
+                # 检查用户的最后点击是否在召回列表中
+                if  last_click_item_dict[user] in set(tmp_recall_items):
+                    hit_num += 1
 
         hit_rate = round(hit_num * 1.0 / user_num, 5)
-        print(' topk: ', k, ' : ', 'hit_num: ', hit_num, 'hit_rate: ', hit_rate, 'user_num : ', user_num)
+        print(f"Topk: {k}, Hit Num: {hit_num}, Hit Rate: {hit_rate}, User Num: {user_num}")
+
+    # 计算MRR
+    print("\nMRR (Mean Reciprocal Rank):")
+    for k in range(5, topk + 1, 5):
+        mrr = 0
+        for user, item_list in user_recall_items_dict.items():
+            if len(item_list) == 0 :
+                continue
+            if user in last_click_item_dict:
+
+                # 获取前k个召回的物品
+                tmp_recall_items = [x[0] for x in user_recall_items_dict[user][:k]]
+                for loc, item in enumerate(tmp_recall_items):
+                    if  item == last_click_item_dict[user]:
+                        mrr += 1 / (loc + 1)
+                        break  # 找到匹配的物品后结束循环
+        mrr = round(mrr * 1.0 / user_num, 5)
+        print(f"Topk: {k}, MRR: {mrr}")
+
 
 
 def get_user_activate_degree_dict(all_click_df):
