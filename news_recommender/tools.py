@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from matplotlib import rcParams
 from tqdm import tqdm
 from collections import defaultdict
 import os, math, warnings, math, pickle
@@ -11,7 +12,9 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.preprocessing import LabelEncoder
 from datetime import datetime
 from sklearn.preprocessing import LabelEncoder
-
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
 from news_recommender.settings import save_path
 
 warnings.filterwarnings('ignore')
@@ -324,6 +327,35 @@ def combine_recall_results(user_multi_recall_dict, weight_dict=None, topk=25):
 
 
 
+
+
+def plot_recall_score_distribution(recall_dict):
+    # 提取所有的分数
+    all_scores = []
+
+    for user, item_scores in recall_dict.items():
+        scores = [score for item, score in item_scores]
+        all_scores.extend(scores)
+
+    # 将分数转换为 numpy 数组
+    all_scores = np.array(all_scores)
+
+    # 绘制分数分布图
+    plt.figure(figsize=(10, 6))
+    # 设置seaborn样式
+    sns.set(style="whitegrid")
+
+    # 设置字体为 SimHei（黑体）
+    rcParams['font.sans-serif'] = ['SimHei']  # 用来显示中文
+    rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
+    # 使用 seaborn 绘制分布图，可以是直方图或密度图
+    sns.histplot(all_scores, kde=True, bins=30)  # kde=True 表示同时显示密度图
+    plt.title('Distribution of Recall Scores')
+    plt.xlabel('Recall Score')
+    plt.ylabel('Frequency')
+
+    # 显示图像
+    plt.show()
 
 
 
