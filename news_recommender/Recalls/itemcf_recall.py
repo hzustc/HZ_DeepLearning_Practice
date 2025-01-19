@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 from news_recommender.settings import save_path, data_path
 from news_recommender.tools import get_user_item_time, get_item_topk_click, \
-    user_multi_recall_dict, metrics_recall, get_item_info_df, get_item_info_dict
+    user_multi_recall_dict, metrics_recall, get_item_info_df, get_item_info_dict, plot_recall_score_distribution
 
 
 class ItemCF:
@@ -131,7 +131,10 @@ class ItemCF:
 
         # 返回根据得分排序后的物品推荐列表
         if len(item_rank) != 0:
-            item_rank = sorted(item_rank.items(), key=lambda x: x[1], reverse=True)[:recall_item_num]
+            # # 对得分取对数
+            item_rank_log = {item_id: math.log(score + 1) for item_id, score in item_rank.items()}
+
+            item_rank = sorted(item_rank_log.items(), key=lambda x: x[1], reverse=True)[:recall_item_num]
         return item_rank
 
     def recommend(self, last_num=2, sim_item_topk=60, recall_item_num=30, recall_user_list = None,
@@ -207,5 +210,6 @@ if __name__ == '__main__':
                                           recall_user_list=recall_user_list)
     metrics_recall(itemcf_recall_dict,test_click_df,topk=30)
     pickle.dump(itemcf_recall_dict, open(os.path.join(save_path, 'itemcf_recall_self_test_dict.pkl'), 'wb'))
+    plot_recall_score_distribution(itemcf_recall_dict)
 
 
