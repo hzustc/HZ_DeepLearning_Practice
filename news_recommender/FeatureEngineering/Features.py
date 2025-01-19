@@ -1,5 +1,7 @@
 import os.path
 import pickle
+
+import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
@@ -10,7 +12,7 @@ class Features:
     def __init__(self, ):
         pass
 
-    def negative_sampling(self, recall_dict, label_click_df, sample_rate=0.001):
+    def negative_sampling(self, recall_dict, label_click_df, sample_rate=0.01):
         print('负采样')
         # 将 recall_dict 列表转换为 DataFrame
         data_df = self.generate_user_item_scroe(recall_dict, None)
@@ -38,6 +40,8 @@ class Features:
         neg_data_new_df = neg_data_new_df.sort_values(['user_id', 'score']).drop_duplicates(
             ['user_id', 'click_article_id'],
             keep='last')
+        print('pos_data_num:', len(pos_data_df), 'neg_data_num:', len(neg_data_df), 'pos/neg:',
+              len(pos_data_df) / len(neg_data_new_df))
         # 将正样本数据合并
         data_new_df = pd.concat([pos_data_df, neg_data_new_df], ignore_index=True)
 
@@ -111,6 +115,8 @@ class Features:
                        inplace=True)
         df = pd.merge(df, temp_df[['user_id', 'last_click_category_id','last_click_article_id']], on='user_id', how='left')
 
+        #用户最后一次点击文章类型与召回物品是否一致
+        df['last_click_category_id_match'] = (df['last_click_category_id'] == df['category_id']).astype(int)
 
         #用户最后一次点击与召回物品的embedding相似度
         item_emb_dict = get_item_emb_dict()
@@ -118,11 +124,26 @@ class Features:
 
         return df
 
+    def generate_multiple_recall_score(self, df, recall_dict_dict):
+        print('生成特征：多路召回分数')
+
+        for recall_name, recall_dict in recall_dict_dict.items():
+            # 将 recall_dict 转换为 DataFrame 格式
+            recall_df = pd.DataFrame(
+                [(user_id, item_id, score) for user_id, items in recall_dict.items() for item_id, score in items],
+                columns=['user_id', 'click_article_id', recall_name + '_score']
+            )
+
+            # 使用 merge 将召回分数合并到原始 df
+            df = pd.merge(df, recall_df, on=['user_id', 'click_article_id'], how='left')
+
+        return df
+
     def save(self, df, file_path=r'D:\AI\HZ_DeepLearning_Practice\news_recommender\tmp_results\recall_features.pkl'):
         df.to_pickle(file_path)
         print('保存数据集:success')
 
-    def generate_features(self, train_click_df=None, df=None):
+    def generate_features(self, train_click_df=None, df=None, recall_dict=None):
         print('生成特征')
 
         _, train_last_click_df = get_hist_and_last_click(train_click_df)
@@ -130,6 +151,7 @@ class Features:
         df = self.generate_time_diff(df, train_last_click_df)
         df = self.generate_item_info(df)
         df = self.generate_user_info(df, train_click_df, train_last_click_df)
+        df = self.generate_multiple_recall_score(df, recall_dict)
 
         return df
 
@@ -143,8 +165,7 @@ if __name__ == '__main__':
     file_path = r'D:\AI\HZ_DeepLearning_Practice\news_recommender\tmp_results\merged_recall_dict_sum.pkl'
     recall_dict = pickle.load(open(file_path, 'rb'))
 
-    train_dataset_without_label = Features().generate_features(train_click_df=train_click_df, recall_dict=recall_dict,
-                                                               avg_sample_num=10)
+    train_dataset_without_label = Features().generate_features(train_click_df=train_click_df, recall_dict=recall_dict)
     Features().save(train_dataset_without_label,
                     os.path.join(r'D:\AI\HZ_DeepLearning_Practice\news_recommender\tmp_results',
                                  'train_dataset_without_label.pkl'))
