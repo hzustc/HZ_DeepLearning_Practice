@@ -12,11 +12,11 @@ from news_recommender.tools import metrics_recall, get_hist_and_last_click
 #%%
 # 常量定义
 SAVE_PATH = r'D:\AI\HZ_DeepLearning_Practice\news_recommender\rank_data'
-# TRAIN_CLICK_PATH = r'D:\AI\HZ_DeepLearning_Practice\news_recommender\tmp_results\train_click_df.pkl'
-# TEST_CLICK_PATH = r'D:\AI\HZ_DeepLearning_Practice\news_recommender\tmp_results\valid_click_last_df.pkl'
-
-TRAIN_CLICK_PATH = r'D:\AI\HZ_DeepLearning_Practice\news_recommender\data_raw\train_and_testA.pkl'
-TEST_CLICK_PATH = r'D:\AI\HZ_DeepLearning_Practice\news_recommender\data_raw\testA_last_click_df.pkl'
+TRAIN_CLICK_PATH = r'D:\AI\HZ_DeepLearning_Practice\news_recommender\tmp_results\train_click_df.pkl'
+TEST_CLICK_PATH = r'D:\AI\HZ_DeepLearning_Practice\news_recommender\tmp_results\valid_click_last_df.pkl'
+#
+# TRAIN_CLICK_PATH = r'D:\AI\HZ_DeepLearning_Practice\news_recommender\data_raw\train_and_testA.pkl'
+# TEST_CLICK_PATH = r'D:\AI\HZ_DeepLearning_Practice\news_recommender\data_raw\testA_last_click_df.pkl'
 
 def load_data(train_path, test_path):
     """加载训练和测试数据"""
@@ -88,7 +88,7 @@ def generate_recall_dict(click_df, recall_user_list, save_path, prefix=""):
     return merged_recall_dict
 
 
-def generate_features_and_labels(click_df, recall_dict, save_path, prefix="",negative_sample = True,sample_rate = 0.001,label_df = None,sample_num = 20):
+def generate_features_and_labels(click_df, recall_dict, save_path, prefix="",negative_sample = True,sample_rate = 0.01,label_df = None,sample_num = 20,mutiple_recall_dict = None):
     """生成特征和标签数据集"""
     features = Features()
     if negative_sample:
@@ -96,7 +96,7 @@ def generate_features_and_labels(click_df, recall_dict, save_path, prefix="",neg
     else:
         dataset = features.generate_user_item_scroe(recall_dict, avg_sample_num=sample_num)
         dataset = features.generate_labels(dataset, label_df)
-    dataset = features.generate_features(click_df, dataset)
+    dataset = features.generate_features(click_df, dataset,mutiple_recall_dict)
     features.save(dataset, os.path.join(save_path, f'{prefix}dataset_with_label.pkl'))
     return dataset
 
@@ -152,17 +152,24 @@ if __name__ == "__main__":
     neg_sample = True
     merge_strategy = 'sum'
     prefix = 'test_'
-    sample_num = 10
+    sample_num = 50
     #%%
     # 训练集召回
     train_recall_user_list = label_click_df['user_id'].unique()
     #%%
     train_itemcf_recall_dict = generate_itemcf_recall_dict(hist_click_df, train_recall_user_list, SAVE_PATH,recall_nums=itemcf_recall_nums)
-    del train_itemcf_recall_dict
+
     #%%
     train_hot_recall_dict = generate_hot_recall_dict(hist_click_df, train_recall_user_list, SAVE_PATH,recall_nums=hot_level_recall_nums,recall_time_range=hot_level_recall_time_range)
-    del train_hot_recall_dict
 
+    #%%
+    train_itemcf_recall_dict = pickle.load(open(os.path.join(SAVE_PATH ,'itemcf_recall_dict.pkl') ,'rb'))
+    train_hot_recall_dict = pickle.load(open(os.path.join(SAVE_PATH ,'hot_recall_dict.pkl') ,'rb'))
+#%%
+    train_mutiple_recall_dict_dict = {
+        'itemcf_recall_dict': train_itemcf_recall_dict,
+        'hot_recall_dict': train_hot_recall_dict
+    }
 
 #%%
     # 合并召回结果
@@ -176,7 +183,8 @@ if __name__ == "__main__":
     # 保存合并后的召回字典
     with open(os.path.join(SAVE_PATH, f'merged_recall_dict.pkl'), 'wb') as f:
         pickle.dump(train_merged_recall_dict, f)
-
+#%%
+    train_merged_recall_dict = pickle.load(open(os.path.join(SAVE_PATH ,'merged_recall_dict.pkl') ,'rb'))
 #%%
     # 训练集评估
     metrics_recall(train_merged_recall_dict, label_click_df, topk=30)
@@ -186,10 +194,18 @@ if __name__ == "__main__":
     test_recall_user_list = test_click_df['user_id'].unique()
     #%%
     test_itemcf_recall_dict = generate_itemcf_recall_dict(all_click_df, test_recall_user_list, SAVE_PATH, prefix=prefix,recall_nums=itemcf_recall_nums)
-    del test_itemcf_recall_dict
+
     #%%
     test_hot_recall_dict = generate_hot_recall_dict(all_click_df, test_recall_user_list, SAVE_PATH, prefix=prefix,recall_nums=hot_level_recall_nums,recall_time_range=hot_level_recall_time_range)
-    del test_hot_recall_dict
+    #%%
+    test_itemcf_recall_dict = pickle.load(open(os.path.join(SAVE_PATH ,'test_itemcf_recall_dict.pkl') ,'rb'))
+    test_hot_recall_dict = pickle.load(open(os.path.join(SAVE_PATH ,'test_hot_recall_dict.pkl') ,'rb'))
+    #%%
+
+    test_mutiple_recall_dict_dict = {
+        'itemcf_recall_dict': train_itemcf_recall_dict,
+        'hot_recall_dict': test_hot_recall_dict
+    }
 #%%
 
     # 合并召回结果
@@ -204,19 +220,21 @@ if __name__ == "__main__":
     with open(os.path.join(SAVE_PATH, f'test_merged_recall_dict.pkl'), 'wb') as f:
         pickle.dump(test_merged_recall_dict, f)
 #%%
+    test_merged_recall_dict = pickle.load(open(os.path.join(SAVE_PATH ,'test_merged_recall_dict.pkl') ,'rb'))
+#%%
     # 测试集评估
     metrics_recall(test_merged_recall_dict, test_click_df, topk=30)
 #%%
     # 训练集特征和标签
-    train_dataset = generate_features_and_labels(hist_click_df, train_merged_recall_dict, SAVE_PATH,label_df=label_click_df,negative_sample=neg_sample,sample_num=sample_num)
+    train_dataset = generate_features_and_labels(hist_click_df, train_merged_recall_dict, SAVE_PATH,label_df=label_click_df,negative_sample=neg_sample,sample_num=sample_num,mutiple_recall_dict=train_mutiple_recall_dict_dict)
 #%%
     # 测试集特征和标签
-    test_dataset = generate_features_and_labels(all_click_df, test_merged_recall_dict, SAVE_PATH, prefix=prefix,negative_sample=False,label_df=test_click_df,sample_num=sample_num)
+    test_dataset = generate_features_and_labels(all_click_df, test_merged_recall_dict, SAVE_PATH, prefix=prefix,negative_sample=False,label_df=test_click_df,sample_num=sample_num,mutiple_recall_dict=test_mutiple_recall_dict_dict)
 
 #%%
     # 训练LightGBM模型
-    Xcol = ['score', 'time_diff','category_id','created_at_ts','words_count','click_timestamp','click_environment','click_deviceGroup','click_os','click_country','click_region','click_referrer_type','last_click_category_id','emb_sim']
-    category_features = ['category_id','click_environment','click_deviceGroup','click_os','click_country','click_region','click_referrer_type','last_click_category_id']
+    Xcol = ['score', 'time_diff','category_id','created_at_ts','words_count','click_timestamp','click_environment','click_deviceGroup','click_os','click_country','click_region','click_referrer_type','last_click_category_id','emb_sim','itemcf_recall_dict_score','hot_recall_dict_score','last_click_category_id_match']
+    category_features = ['category_id','click_environment','click_deviceGroup','click_os','click_country','click_region','click_referrer_type','last_click_category_id','last_click_category_id_match']
     X_train, y_train = train_dataset[Xcol], train_dataset['label']
     X_test, y_test = test_dataset[Xcol], test_dataset['label']
     gbm = train_lightgbm(X_train, y_train, X_test, y_test, category_features)
@@ -224,3 +242,17 @@ if __name__ == "__main__":
 #%%
     # 评估模型
     evaluate_model(gbm, test_dataset, test_click_df, Xcol)
+#%%
+    # 输出特征重要性（默认是 'split' 类型）
+    importance = gbm.feature_importance(importance_type='gain')
+    feature_names = Xcol
+
+    # 将特征重要性和特征名称组合在一起
+    feature_importance = list(zip(feature_names, importance))
+
+    # 按重要性排序
+    feature_importance.sort(key=lambda x: x[1], reverse=True)
+
+    # 打印特征重要性
+    for feature, importance_value in feature_importance:
+        print(f"{feature}: {importance_value}")
