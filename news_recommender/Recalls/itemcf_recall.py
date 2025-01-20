@@ -17,7 +17,7 @@ from news_recommender.tools import get_user_item_time, get_item_topk_click, \
 class ItemCF:
     def __init__(self, all_click_df):
 
-        self.all_click_df = all_click_df
+        self.all_click_df = all_click_df.copy()
 
 
         mm = MinMaxScaler()
@@ -98,6 +98,7 @@ class ItemCF:
                              item_topk_click, item_created_time_dict, emb_i2i_sim):
 
         user_hist_items = user_item_time_dict[user_id]
+        last = len(user_hist_items)
         item_rank = {}
 
         # 遍历用户历史点击的每个物品，逐个处理
@@ -107,7 +108,7 @@ class ItemCF:
             for j, wij in sorted(i2i_sim[i].items(), key=lambda x: x[1], reverse=True)[:sim_item_topk]:
                 if j in user_hist_items:
                     continue
-                created_time_weight = np.exp(0.8 ** np.abs(item_created_time_dict[i] - item_created_time_dict[j]))
+                created_time_weight = np.exp(0.8 ** np.abs(item_created_time_dict[i] - item_created_time_dict[j]))*np.exp(1.4*(loc-last))
                 loc_weight = (0.9 ** (len(user_hist_items) - loc))
                 content_weight = 1.0
                 if emb_i2i_sim.get(i, {}).get(j, None) is not None:
@@ -213,3 +214,22 @@ if __name__ == '__main__':
     plot_recall_score_distribution(itemcf_recall_dict)
 
 
+    # train_click_df = pd.read_csv(r'D:\AI\HZ_DeepLearning_Practice\news_recommender\data_raw\train_click_log.csv')
+    # testA_click_df = pd.read_csv(r'D:\AI\HZ_DeepLearning_Practice\news_recommender\data_raw\testA_click_log.csv')
+    #
+    # recall_user_list = test_click_df['user_id'].unique()
+    # recall_user_set = set(recall_user_list)
+    #
+    #
+    # module = ItemCF(all_click_df=all_click_df)
+    #
+    # module.itemcf_sim(module.all_click_df, module.item_created_time_dict,
+    #                   to_path=os.path.join(save_path, 'itemcf_i2i_self_test_sim.pkl'))
+    #
+    # itemcf_recall_dict = module.recommend(last_num=2, sim_item_topk=60, recall_item_num=50,
+    #                                       to_path=os.path.join(save_path, 'itemcf_recall_self_test_dict.pkl'),
+    #                                       sim_file_path=os.path.join(save_path, 'itemcf_i2i_self_test_sim.pkl'),
+    #                                       recall_user_list=recall_user_list)
+    # metrics_recall(itemcf_recall_dict,test_click_df,topk=30)
+    # pickle.dump(itemcf_recall_dict, open(os.path.join(save_path, 'itemcf_recall_self_test_dict.pkl'), 'wb'))
+    # plot_recall_score_distribution(itemcf_recall_dict)

@@ -65,6 +65,7 @@ class Features:
 
     def generate_labels(self, df, label_df):
         print('生成label')
+        df = df.copy()
         user_last_click_dict = label_df.set_index('user_id')['click_article_id'].to_dict()
         df['label'] = df['user_id'].map(user_last_click_dict) == df['click_article_id']
         df['label'] = df['label'].astype(int)
@@ -72,6 +73,7 @@ class Features:
 
     def generate_time_diff(self, df, train_last_df):
         print('生成特征：time_diff')
+
         # 读取文章信息表
         item_info_df = pd.read_csv(r'D:\AI\HZ_DeepLearning_Practice\news_recommender\data_raw\articles.csv')
 
@@ -83,11 +85,11 @@ class Features:
                              left_on='click_article_id', right_on='article_id', how='left')
 
         # 计算时间差
-        merged_df['time_diff'] = (merged_df['click_timestamp'] - merged_df['created_at_ts']) / 3600000
+        merged_df['last_click_and_recall_created_time_diff'] = (merged_df['click_timestamp'] - merged_df['created_at_ts']) / 3600000
 
         # 选择需要的列
-        df = merged_df[list(df.columns) + ['time_diff']]
-        return df
+        new_df = merged_df[list(df.columns) + ['last_click_and_recall_created_time_diff']]
+        return new_df
 
     def generate_item_info(self, df, ):
         print('生成特征：文章原始特征')
@@ -95,11 +97,14 @@ class Features:
         item_info_df = pd.read_csv(r'D:\AI\HZ_DeepLearning_Practice\news_recommender\data_raw\articles.csv')
 
         #召回物品的原始特征
-        df = pd.merge(df, item_info_df, left_on='click_article_id', right_on='article_id', how='left')
+        new_df = pd.merge(df, item_info_df, left_on='click_article_id', right_on='article_id', how='left')
 
-        return df
+        new_df = new_df.drop(columns=['article_id'])
+        new_df.rename(columns={'category_id': 'recall_item_category_id','created_at_ts': 'recall_item_created_at_ts', 'words_count': 'recall_item_words_count'},inplace=True)
+        return new_df
 
     def generate_user_info(self, df, all_click_df, last_click_df):
+        df = df.copy()
         item_info_df = pd.read_csv(r'D:\AI\HZ_DeepLearning_Practice\news_recommender\data_raw\articles.csv')
         print('生成特征：用户统计特征')
         user_group_all_click_df = all_click_df.groupby('user_id')
@@ -111,12 +116,12 @@ class Features:
         #用户最后一次点击文章类型
         temp_df = pd.merge(last_click_df[['user_id', 'click_article_id']], item_info_df, left_on=
         'click_article_id', right_on='article_id', how='left')
-        temp_df.rename(columns={'click_article_id': 'last_click_article_id', 'category_id': 'last_click_category_id'},
+        temp_df.rename(columns={'click_article_id': 'last_click_article_id', 'category_id': 'last_click_category_id', 'created_at_ts': 'last_click_created_at_ts', 'words_count': 'last_click_words_count'},
                        inplace=True)
-        df = pd.merge(df, temp_df[['user_id', 'last_click_category_id','last_click_article_id']], on='user_id', how='left')
+        df = pd.merge(df, temp_df[['user_id', 'last_click_category_id','last_click_article_id','last_click_created_at_ts','last_click_words_count']], on='user_id', how='left')
 
         #用户最后一次点击文章类型与召回物品是否一致
-        df['last_click_category_id_match'] = (df['last_click_category_id'] == df['category_id']).astype(int)
+        df['last_click_category_id_match'] = (df['last_click_category_id'] == df['recall_item_category_id']).astype(int)
 
         #用户最后一次点击与召回物品的embedding相似度
         item_emb_dict = get_item_emb_dict()
@@ -126,7 +131,7 @@ class Features:
 
     def generate_multiple_recall_score(self, df, recall_dict_dict):
         print('生成特征：多路召回分数')
-
+        df =df.copy()
         for recall_name, recall_dict in recall_dict_dict.items():
             # 将 recall_dict 转换为 DataFrame 格式
             recall_df = pd.DataFrame(
@@ -142,16 +147,67 @@ class Features:
     def save(self, df, file_path=r'D:\AI\HZ_DeepLearning_Practice\news_recommender\tmp_results\recall_features.pkl'):
         df.to_pickle(file_path)
         print('保存数据集:success')
+    def generate_last_click_time_and_last_click_created_time_diff(self,df):
+        # 最后一次点击时间与最后一次点击物品的创建时间的差
+        df = df.copy()
+        df['last_click_and_last_click_created_time_diff'] = (df['last_click_timestamp'] - df['last_click_created_at_ts']) / 3600000
+        return df
+    def generate_last_click_words_and_recall_words_diff(self,df):
+        # 最后一次点击文章的词数与召回物品的词数的差
+        df = df.copy()
+        df['last_click_words_and_recall_words_diff'] = (df['last_click_words_count'] - df['recall_item_words_count'])
+        return df
+    def generate_last_click_created_time_and_recall_created_time_diff(self,df):
+        # 最后一次点击文章的创建时间与召回物品的创建时间的差
+            df = df.copy()
+            df['last_click_and_recall_created_time_diff'] = (df['last_click_created_at_ts'] - df['recall_item_created_at_ts']) / 3600000
+            return df
 
+    def generate_recall_item_cnt(self,df,train_click_df):
+        # 召回新闻的历史被阅读次数
+        df = df.copy()
+        recall_item_cnt_df = train_click_df.groupby('click_article_id').size().reset_index(name='recall_item_cnt')
+        df = pd.merge(df, recall_item_cnt_df, left_on='recall_article_id',right_on='click_article_id', how='left')
+        df['recall_item_cnt'].fillna(0, inplace=True)
+        df.drop(columns=['click_article_id'],inplace=True)
+        return df
+    def generate_last_item_cnt(self,df,train_click_df):
+        # 最后一次点击新闻的历史被阅读次数
+        df = df.copy()
+        last_item_cnt_df = train_click_df.groupby('click_article_id').size().reset_index(name='last_item_cnt')
+        df = pd.merge(df, last_item_cnt_df, left_on='last_click_article_id',right_on='click_article_id', how='left')
+        df['last_item_cnt'].fillna(0, inplace=True)
+        df.drop(columns=['click_article_id'],inplace=True)
+        return df
+    def change_name(self,df):
+        df=df.copy()
+        df.rename(columns={'click_article_id':'recall_article_id',
+                           'click_timestamp':'last_click_timestamp',
+                           'click_environment':'last_click_environment',
+                           'click_deviceGroup':'last_click_deviceGroup',
+                           'click_os':'last_click_os',
+                           'click_country':'last_click_country',
+                           'click_region':'last_click_region',
+                           'click_referrer_type':'last_click_referrer_type',
+                           'emb_sim':'last_click_and_recall_emb_sim',
+
+                           },inplace=True)
+        return df
     def generate_features(self, train_click_df=None, df=None, recall_dict=None):
         print('生成特征')
-
+        df = df.copy()
         _, train_last_click_df = get_hist_and_last_click(train_click_df)
 
         df = self.generate_time_diff(df, train_last_click_df)
         df = self.generate_item_info(df)
         df = self.generate_user_info(df, train_click_df, train_last_click_df)
         df = self.generate_multiple_recall_score(df, recall_dict)
+        df = self.change_name(df)
+        df = self.generate_last_click_time_and_last_click_created_time_diff(df)
+        df = self.generate_last_click_words_and_recall_words_diff(df)
+        df = self.generate_last_click_created_time_and_recall_created_time_diff(df)
+        df = self.generate_recall_item_cnt(df, train_click_df)
+        df = self.generate_last_item_cnt(df, train_click_df)
 
         return df
 

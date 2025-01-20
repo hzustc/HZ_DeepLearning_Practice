@@ -182,7 +182,7 @@ if __name__ == '__main__':
     # test_click_df =pd.read_pickle(r'D:\AI\HZ_DeepLearning_Practice\news_recommender\tmp_results\valid_click_last_df.pkl')
 
     # 定义每个召回字典的权重
-    weights = [1, 0.9]  # 第一个召回字典的权重为0.7，第二个为0.3
+    weights = [1, 1.2]  # 第一个召回字典的权重为0.7，第二个为0.3
 
     merge_model = 'sum'
     # 使用 sum 策略和自定义权重合并召回字典

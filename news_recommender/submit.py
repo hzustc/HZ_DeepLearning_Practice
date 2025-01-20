@@ -5,8 +5,8 @@ import pickle
 valid_click_df = pd.read_csv(r'D:\AI\HZ_DeepLearning_Practice\news_recommender\data_raw\testA_click_log.csv')
 
 # 加载推荐结果
-# itemcf_recall = pickle.load(open(r'D:\AI\HZ_DeepLearning_Practice\news_recommender\tmp_results\lightgbm_recall_dict.pkl', 'rb'))
-itemcf_recall = pickle.load(open(r'D:\AI\HZ_DeepLearning_Practice\news_recommender\rank_data\test_merged_recall_dict.pkl', 'rb'))
+recall_dict = pickle.load(open(r'D:\AI\HZ_DeepLearning_Practice\news_recommender\tmp_results\lightgbm_recall_dict.pkl', 'rb'))
+# recall_dict = pickle.load(open(r'D:\AI\HZ_DeepLearning_Practice\news_recommender\rank_data\test_merged_recall_dict.pkl', 'rb'))
 # 获取用户ID列表
 userlist = set(valid_click_df['user_id'].values)
 
@@ -15,9 +15,9 @@ submit_list = []
 
 # 遍历每个用户并为他们生成推荐
 for user in userlist:
-    if user in itemcf_recall and len(itemcf_recall[user]) >= 5:
+    if user in recall_dict and len(recall_dict[user]) >= 5:
         # 提取前5篇推荐的文章
-        articles = [itemcf_recall[user][i][0] for i in range(5)]
+        articles = [recall_dict[user][i][0] for i in range(5)]
         # 将结果追加到列表中
         submit_list.append([user] + articles)
     else:
