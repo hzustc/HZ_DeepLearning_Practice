@@ -111,41 +111,91 @@ def generate_features_and_labels(click_df, recall_dict, save_path, prefix="", ne
 
 def train_lightgbm(X_train, y_train, X_test, y_test, categorical_feature=[]):
     """训练LightGBM模型"""
-    lgb_train = lgb.Dataset(X_train, y_train)
-    lgb_eval = lgb.Dataset(X_test, y_test, reference=lgb_train)
+    # lgb_train = lgb.Dataset(X_train, y_train)
+    # lgb_eval = lgb.Dataset(X_test, y_test, reference=lgb_train)
+    #
     # params = {
     #     'boosting_type': 'gbdt',
     #     'objective': 'binary',
     #     'metric': 'auc',
-    #     'num_leaves': 255,
+    #     'num_leaves': 31,  #63 0.27845
     #     'learning_rate': 0.05,
     #     'feature_fraction': 0.9,
     #     'bagging_fraction': 0.8,
     #     'bagging_freq': 5,
     #     'verbose': 0,
-    #     'early_stopping_rounds': 10,
+    #     'early_stopping_rounds': 50,
     #     'is_unbalance': True,
+    #     'n_estimators': 1000,
+    #     #'max_depth':3,
+    #
     # }
+    # gbm = lgb.train(params, lgb_train, num_boost_round=100, valid_sets=[lgb_eval],
+    #                 categorical_feature=categorical_feature)
+    # return gbm
+
+    """使用 lgb.cv 进行 k 折交叉验证，并在整个数据集上训练最终模型"""
+
     params = {
         'boosting_type': 'gbdt',
         'objective': 'binary',
         'metric': 'auc',
-        'num_leaves': 63,  #63 0.27845
+        'num_leaves': 31,
         'learning_rate': 0.05,
         'feature_fraction': 0.9,
         'bagging_fraction': 0.8,
         'bagging_freq': 5,
         'verbose': 0,
-        'early_stopping_rounds': 10,
         'is_unbalance': True,
+        'early_stopping_rounds': 10,
         'n_estimators': 1000,
-        #'max_depth':3,
-
     }
-    gbm = lgb.train(params, lgb_train, num_boost_round=100, valid_sets=[lgb_eval],
-                    categorical_feature=categorical_feature)
-    return gbm
 
+    lgb_train = lgb.Dataset(X_train, y_train, categorical_feature=categorical_feature)
+
+    # 使用 lgb.cv 进行 k 折交叉验证
+    cv_results = lgb.cv(
+        params,
+        lgb_train,
+        num_boost_round=100,
+        nfold=5,
+        metrics='auc',
+        stratified=True,
+        seed=42,
+
+    )
+
+    # 输出交叉验证中最好的 AUC 分数
+    best_auc = max(cv_results['valid auc-mean'])
+    print(f"Best AUC score from cross-validation: {best_auc}")
+
+    # 获取最佳的迭代次数
+    best_iteration = len(cv_results['valid auc-mean'])
+    print(f"Training final model with best iteration: {best_iteration}")
+
+    # 在整个训练集上使用最佳迭代次数训练最终模型
+    final_model = lgb.train(
+        {
+            'boosting_type': 'gbdt',
+            'objective': 'binary',
+            'metric': 'auc',
+            'num_leaves': 31,
+            'learning_rate': 0.05,
+            'feature_fraction': 0.9,
+            'bagging_fraction': 0.8,
+            'bagging_freq': 5,
+            'verbose': 0,
+            'is_unbalance': True,
+
+            'n_estimators': 1000,
+        },
+        lgb_train,
+        num_boost_round=best_iteration,  # 使用最佳迭代次数
+        categorical_feature=categorical_feature
+    )
+
+    # 返回最终训练的模型
+    return final_model
 
 def evaluate_model(model, X_test, test_label_click_df, columns):
     """评估模型并生成推荐结果"""
@@ -176,7 +226,7 @@ if __name__ == "__main__":
     neg_sample = True
     merge_strategy = 'sum'
     prefix = 'test_'
-    sample_num = 30
+    sample_num = 50
     #%%
     # 训练集召回
     train_recall_user_list = label_click_df['user_id'].unique()
@@ -295,12 +345,13 @@ Topk: 30, MRR: 0.20058'''
     #%%
     train_dataset.rename(columns={'recall_article_id': 'click_article_id'}, inplace=True)
     test_dataset.rename(columns={'recall_article_id': 'click_article_id'}, inplace=True)
+    #%%
     # 训练LightGBM模型
     all_Xcol = {'user_id': (0, 1),
                 'click_article_id': (0, 1),
                 'score': (1, 0),
                 'last_click_and_recall_created_time_diff': (1, 0),
-                'recall_item_category_id': (0, 1),
+                'recall_item_category_id': (1, 1),
                 'recall_item_created_at_ts': (1, 0),
                 'recall_item_words_count': (1, 0),
                 'last_click_timestamp': (1, 0),
