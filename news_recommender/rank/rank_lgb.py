@@ -148,7 +148,7 @@ def train_lightgbm(X_train, y_train, X_test, y_test, categorical_feature=[]):
         'verbose': 0,
         'is_unbalance': True,
         'early_stopping_rounds': 10,
-        'n_estimators': 1000,
+
     }
 
     lgb_train = lgb.Dataset(X_train, y_train, categorical_feature=categorical_feature)
@@ -157,7 +157,7 @@ def train_lightgbm(X_train, y_train, X_test, y_test, categorical_feature=[]):
     cv_results = lgb.cv(
         params,
         lgb_train,
-        num_boost_round=100,
+        num_boost_round=2000,
         nfold=5,
         metrics='auc',
         stratified=True,
@@ -187,7 +187,7 @@ def train_lightgbm(X_train, y_train, X_test, y_test, categorical_feature=[]):
             'verbose': 0,
             'is_unbalance': True,
 
-            'n_estimators': 1000,
+
         },
         lgb_train,
         num_boost_round=best_iteration,  # 使用最佳迭代次数
